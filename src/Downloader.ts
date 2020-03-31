@@ -159,15 +159,15 @@ class Downloader {
     }
   }
 
-  public isImageUrl (url: string): boolean {
+  public isImageUrl(url: string): boolean {
     return URL_IMAGE_REGEX.exec(url) ? true : false;
   }
 
-  public isMimeTypeImage (mimetype: string): boolean {
+  public isMimeTypeImage(mimetype: string): boolean {
     return MIME_IMAGE_REGEX.exec(mimetype) ? true : false;
   }
 
-  public stripHttpFromUrl (url: string) {
+  public stripHttpFromUrl(url: string) {
     return url.replace(FIND_HTTP_REGEX, '');
   }
 
@@ -246,40 +246,44 @@ class Downloader {
     return this.getJSON(`${this.mw.apiUrl}${query}`);
   }
 
-  public async getArticleDetailsIds(articleIds: string[], continuation?: ContinueOpts, shouldGetThumbnail = false): Promise<QueryMwRet> {
-    const queryOpts = {
-      ...this.getArticleQueryOpts(shouldGetThumbnail),
-      titles: articleIds.join('|'),
-      ...(this.canFetchCoordinates ? { colimit: 'max' } : {}),
-      ...(this.mw.getCategories ? {
-        cllimit: 'max',
-        clshow: '!hidden',
-      } : {}),
-      ...(continuation || {}),
-    };
+  public async getArticleDetailsIds(articleIds: string[], shouldGetThumbnail = false): Promise<QueryMwRet> {
+    let continuation: ContinueOpts;
+    let totalProcessedResponse: QueryMwRet;
+    while (true) {
+      console.log(continuation)
+      let queryOpts = {
+        ...this.getArticleQueryOpts(shouldGetThumbnail),
+        titles: articleIds.join('|'),
+        ...(this.canFetchCoordinates ? { colimit: 'max' } : {}),
+        ...(this.mw.getCategories ? {
+          cllimit: 'max',
+          clshow: '!hidden',
+        } : {}),
+        ...(continuation || {}),
+      };
+      const queryString = objToQueryString(queryOpts);
+      const reqUrl = `${this.mw.apiUrl}${queryString}`;
+      const resp = await this.getJSON<MwApiResponse>(reqUrl);
+      this.handleMWWarningsAndErrors(resp);
 
-    const queryString = objToQueryString(queryOpts);
-    const reqUrl = `${this.mw.apiUrl}${queryString}`;
+      let processedResponse = resp.query ? normalizeMwResponse(resp.query) : {};
+      if (resp.continue) {
+        continuation = resp.continue;
+        const relevantDetails = this.stripNonContinuedProps(processedResponse);
 
-    const resp = await this.getJSON<MwApiResponse>(reqUrl);
-    this.handleMWWarningsAndErrors(resp);
-
-    let processedResponse = resp.query ? normalizeMwResponse(resp.query) : {};
-
-    if (resp.continue) {
-
-      const nextResp = await this.getArticleDetailsIds(articleIds, resp.continue);
-
-      const relevantDetails = this.stripNonContinuedProps(nextResp, continuation);
-
-      return deepmerge(processedResponse, relevantDetails);
-
-    } else {
-      if (this.mw.getCategories) {
-        processedResponse = await this.setArticleSubCategories(processedResponse);
+        totalProcessedResponse == totalProcessedResponse === undefined ? relevantDetails :
+          deepmerge(totalProcessedResponse, relevantDetails);
+      } else {
+        if (this.mw.getCategories) {
+          processedResponse = await this.setArticleSubCategories(processedResponse);
+          console.log(processedResponse);
+        }
+        totalProcessedResponse = totalProcessedResponse === undefined ? processedResponse
+          : deepmerge(totalProcessedResponse, processedResponse);
+        break;
       }
-      return processedResponse;
     }
+    return totalProcessedResponse;
   }
 
   public async getArticleDetailsNS(ns: number, gapcontinue: string = '', queryContinuation?: QueryContinueOpts): Promise<{ gapContinue: string, articleDetails: QueryMwRet }> {
