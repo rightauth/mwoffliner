@@ -248,10 +248,9 @@ class Downloader {
 
   public async getArticleDetailsIds(articleIds: string[], shouldGetThumbnail = false): Promise<QueryMwRet> {
     let continuation: ContinueOpts;
-    let totalProcessedResponse: QueryMwRet;
+    let finalProcessedResp: QueryMwRet;
     while (true) {
-      console.log(continuation)
-      let queryOpts = {
+      const queryOpts = {
         ...this.getArticleQueryOpts(shouldGetThumbnail),
         titles: articleIds.join('|'),
         ...(this.canFetchCoordinates ? { colimit: 'max' } : {}),
@@ -271,19 +270,18 @@ class Downloader {
         continuation = resp.continue;
         const relevantDetails = this.stripNonContinuedProps(processedResponse);
 
-        totalProcessedResponse == totalProcessedResponse === undefined ? relevantDetails :
-          deepmerge(totalProcessedResponse, relevantDetails);
+        finalProcessedResp = finalProcessedResp === undefined ? relevantDetails :
+          deepmerge(finalProcessedResp, relevantDetails);
       } else {
         if (this.mw.getCategories) {
           processedResponse = await this.setArticleSubCategories(processedResponse);
-          console.log(processedResponse);
         }
-        totalProcessedResponse = totalProcessedResponse === undefined ? processedResponse
-          : deepmerge(totalProcessedResponse, processedResponse);
+        finalProcessedResp = finalProcessedResp === undefined ? processedResponse
+          : deepmerge(finalProcessedResp, processedResponse);
         break;
       }
     }
-    return totalProcessedResponse;
+    return finalProcessedResp;
   }
 
   public async getArticleDetailsNS(ns: number, gapcontinue: string = '', queryContinuation?: QueryContinueOpts): Promise<{ gapContinue: string, articleDetails: QueryMwRet }> {
